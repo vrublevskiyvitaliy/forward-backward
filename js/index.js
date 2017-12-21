@@ -3,19 +3,24 @@ document.addEventListener('DOMContentLoaded',  () => {
     const matrixForm = document.getElementById('matrixForm');
     const resultBlock = document.getElementById('resultBlock');
 
-    const fieldN = document.getElementById('varN');
-    const fieldK = document.getElementById('varK');
+    const fieldN = document.getElementById('varN'); // number of observations
+    const fieldK = document.getElementById('varK'); // number of states
     const obsField = document.getElementById('obsField');
 
     const vectorPi = document.getElementById('vectorPi');
     const matrixA = document.getElementById('matrixA');
     const matrixB = document.getElementById('matrixB');
 
+    let ObservationN, StatesN;
+
     initForm.addEventListener('submit', (event) => {
         event.preventDefault();
 
         const N = parseInt(fieldN.value);
         const K = parseInt(fieldK.value);
+
+        ObservationN = parseInt(fieldN.value);
+        StatesN = parseInt(fieldK.value);
 
         vectorPi.innerHTML = generateInputs(K);
         matrixA.innerHTML = generateMatrix(K, K);
@@ -28,7 +33,7 @@ document.addEventListener('DOMContentLoaded',  () => {
     matrixForm.addEventListener('submit', (event) => {
         event.preventDefault();
 
-        const result = Viterbi(
+        const result = Forward_Backward(
             getObservations(obsField),
             getInputValues(vectorPi),
             getMatrixValues(matrixA),
@@ -39,52 +44,148 @@ document.addEventListener('DOMContentLoaded',  () => {
         resultBlock.classList.add('is-visible');
     });
 
-    const Viterbi = (Y, pi, A, B) => {
-        const T = Y.length;
-        const K = A.length;
-        let X = Array(T).fill(-1);
-        let TIndex = getTwoDimensionalArray(K, T, -1);
-        let TState = getTwoDimensionalArray(K, T, -1);
-        const output = [];
+    let fwd, bkw, prob;
 
-        for (let i = 0; i < K; i++) {
-            TState[i][0] = pi[i] * B[i][Y[0]];
-            TIndex[i][0] = 0;
-            output.push(`T[${i + 1}][1] = ` + TState[i][0].toPrecision(5));
+    // move forward
+    const Alpha = (state, time, transition_probability, emit_probability, observations, output, fwd) => {
+        if (fwd[state][time] !== -1) {
+            return fwd[state][time];
         }
+
+        output.push("------------------------------");
+        output.push(`Calculating Alpha[State = ${state + 1}, Time = ${time + 1}]`);
+        output.push(`Alpha[State, Time] = emit_probability[State][Observation[Time]] * (sum for states from s=1 to ${StatesN} : (Alpha[s, Time - 1]) )`);
+
+        let f = 0;
+        let line = "(";
+        for(let j = 0; j < StatesN; j++) {
+            let add =
+            Alpha(j, time - 1, transition_probability, emit_probability, observations, output, fwd) *
+                transition_probability[j][state];
+            line += add.toPrecision(5);
+            if (j !== StatesN - 1) {
+                line +=" + ";
+            }
+            f += add;
+        }
+
+        line += ")";
+
+        let mult = emit_probability[state][observations[time]];
+        f *= emit_probability[state][observations[time]];
+
+        line = `Alpha[State = ${state + 1}, Time = ${time + 1}] = ${mult.toPrecision(5)} * ${line} = ${f.toPrecision(5)}`;
+        output.push(line);
         output.push("------------------------------");
 
+        fwd[state][time] = f;
+        return fwd[state][time];
+    };
 
-        for (let i = 1; i < T; i++) {
-            for (let j = 0; j < K; j++) {
-                let message = `TState[${j + 1}][${i + 1}] = max(`;
-                for (let k = 0; k < K; k++) {
-                    const cur = TState[k][i - 1] * A[k][j] * B[j][Y[i]];
-                    if (TIndex[j][i] === -1 || cur > TState[j][i]) {
-                        TState[j][i] = cur;
-                        TIndex[j][i] = k;
-                    }
-                    message += (k > 0 ? ', ' : '') + cur.toPrecision(5);
-                }
+    // move backward
+    const Beta = (state, time, transition_probability, emit_probability, observations, output, bkw) => {
+        if (bkw[state][time] !== -1) {
+            return bkw[state][time];
+        }
 
-                message += ') = ' + TState[j][i].toPrecision(5);
-                output.push(message);
-                output.push(`TIndex[${j + 1}][${i + 1}] = ${TIndex[j][i] + 1}`)
+        output.push("------------------------------");
+        output.push(`Calculating Beta[State = ${state + 1}, Time = ${time + 1}]`);
+        output.push(`Beta[State, Time] = sum for states from s=1 to ${StatesN} : (Beta[s, Time + 1]) * transition_probability[State][s] * emit_probability[s][Observation[Time + 1]`);
+
+        let b = 0;
+        let line = "";
+        for(let j = 0; j < StatesN; j++) {
+
+            let add =  Beta(j, time + 1, transition_probability, emit_probability, observations, output, bkw) *
+                transition_probability[state][j] * emit_probability[j][observations[time + 1]];
+            b += add;
+            line += add.toPrecision(5);
+            if (j !== StatesN - 1) {
+                line +=" + ";
             }
+        }
+
+        line = `Beta[State = ${state + 1}, Time = ${time + 1}] = ${line} = ${b.toPrecision(5)}`;
+
+        output.push(line);
+        output.push("------------------------------");
+
+        bkw[state][time] = b;
+        return bkw[state][time];
+    };
+
+
+    const Forward_Backward = (Y, pi, A, B) => {
+        const T = Y.length;
+        const K = A.length;
+
+        fwd = getTwoDimensionalArray(StatesN, T, -1);
+        bkw = getTwoDimensionalArray(StatesN, T, -1);
+        prob = getTwoDimensionalArray(StatesN, T, -1);
+
+
+        const output = [];
+        output.push("------------------------------");
+        output.push("Initial computations");
+        output.push("For all states from s = 1 to " + StatesN + ":");
+        output.push("-- Alpha[s, 1] = emit_probability[s][observations[1]] * П[s]");
+        output.push(`-- Beta [s, T] = 1`);
+        output.push("                              ");
+
+        for (let i = 0; i < K; i++) {
+            fwd[i][0] = B[i][Y[0]] * pi[i];
+            bkw[i][T - 1] = 1;
+            output.push(`Alpha[${i + 1}][1] = ` + B[i][Y[0]].toPrecision(5) + " * " + pi[i].toPrecision(5) + ' = ' + fwd[i][0].toPrecision(5));
+            output.push(`Beta[${i + 1}][${T}]= ` + bkw[i][0].toPrecision(5));
             output.push("------------------------------");
-        }
 
-        for (let k = 0; k < K; k++) {
-            if (X[T - 1] === -1 || TState[k][T - 1] > TState[X[T - 1]][T - 1]) {
-                X[T - 1] = k;
+        }
+        output.push("Calculate Alpha (Forward)");
+        output.push("------------------------------");
+
+        for (let t = 1; t < T; t++) {
+            for (let i = 0; i < K; i++) {
+                Alpha(i, t, A, B, Y, output, fwd);
             }
         }
 
-        for (let i = T - 1; i > 0; i--) {
-            X[i - 1] = TIndex[X[i]][i];
+        output.push("Calculate Beta (Backward)");
+        output.push("------------------------------");
+
+        for (let t = T - 2; t >= 0; t--) {
+            for (let i = 0; i < K; i++) {
+                Beta(i, t, A, B, Y, output, bkw);
+            }
         }
 
-        output.push('X = [' + X.map(x => x + 1).join(', ') + ']');
+        output.push("Calculate Probabilities* of each State and Time");
+        output.push("------------------------------");
+        output.push("Prob[State, Time] = Alpha[State][Time] * Beta[State][Time]");
+        output.push("We don't normalize our probabilities, so it's ok that they will not equal to 1 in total");
+
+        for (let t = 0; t < T; t--) {
+            for (let i = 0; i < K; i++) {
+                prob[i][t] = fwd[i][t] * bkw[i][t];
+                output.push(`Probability[${i + 1}][${t + 1}]= ` + prob[i][t].toPrecision(5));
+                output.push("------------------------------");
+            }
+        }
+
+        output.push("------------------------------");
+        output.push(" Final Sequence");
+        let sequence = "[";
+        for (let t = 0; t < T; t--) {
+            let state = 0;
+            for (let i = 1; i < K; i++) {
+                if (prob[state][t] < prob[i][t]) {
+                    state = i;
+                }
+            }
+            sequence += " " + (state + 1) + " ";
+        }
+
+        sequence += "]";
+        output.push(sequence);
 
         return output.join('\n');
     };

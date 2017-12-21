@@ -163,7 +163,7 @@ document.addEventListener('DOMContentLoaded',  () => {
         output.push("Prob[State, Time] = Alpha[State][Time] * Beta[State][Time]");
         output.push("We don't normalize our probabilities, so it's ok that they will not equal to 1 in total");
 
-        for (let t = 0; t < T; t--) {
+        for (let t = 0; t < T; t++) {
             for (let i = 0; i < K; i++) {
                 prob[i][t] = fwd[i][t] * bkw[i][t];
                 output.push(`Probability[${i + 1}][${t + 1}]= ` + prob[i][t].toPrecision(5));
@@ -174,7 +174,7 @@ document.addEventListener('DOMContentLoaded',  () => {
         output.push("------------------------------");
         output.push(" Final Sequence");
         let sequence = "[";
-        for (let t = 0; t < T; t--) {
+        for (let t = 0; t < T; t++) {
             let state = 0;
             for (let i = 1; i < K; i++) {
                 if (prob[state][t] < prob[i][t]) {

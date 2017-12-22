@@ -136,7 +136,7 @@ document.addEventListener('DOMContentLoaded',  () => {
             fwd[i][0] = B[i][Y[0]] * pi[i];
             bkw[i][T - 1] = 1;
             output.push(`Alpha[${i + 1}][1] = ` + B[i][Y[0]].toPrecision(5) + " * " + pi[i].toPrecision(5) + ' = ' + fwd[i][0].toPrecision(5));
-            output.push(`Beta[${i + 1}][${T}]= ` + bkw[i][0].toPrecision(5));
+            output.push(`Beta[${i + 1}][${T}]= ` + bkw[i][T - 1].toPrecision(5));
             output.push("------------------------------");
 
         }
